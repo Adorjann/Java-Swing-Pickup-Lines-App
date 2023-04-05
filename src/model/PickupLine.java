@@ -3,10 +3,12 @@ package model;
 import service.ProfanityBase;
 
 import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class PickupLine {
 
-    private String line;
+    private final String line;
 
     public PickupLine(String line) {
         this.line = line;
@@ -31,10 +33,16 @@ public class PickupLine {
     }
 
     public boolean isBadLanguage() {
-        String[] lineWords = line.split(" ");
+        List<String> lineWords = Arrays.stream(line.split(" "))
+                                       .map(String::toLowerCase)
+                                       .collect(Collectors.toList());
 
         return Arrays.stream(ProfanityBase.SwearWords)
-                .anyMatch(badWord -> Arrays.asList(lineWords).contains(badWord));
+                .anyMatch(badWord -> lineWords.contains(badWord)
+                        || lineWords.contains(badWord+".")
+                        || lineWords.contains(badWord+"?")
+                        || lineWords.contains(badWord+"!")
+                        || lineWords.contains(badWord+"]"));
     }
 
 }

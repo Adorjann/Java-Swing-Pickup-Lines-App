@@ -6,7 +6,6 @@ import ca.odell.glazedlists.FilterList;
 import ca.odell.glazedlists.SortedList;
 import ca.odell.glazedlists.matchers.MatcherEditor;
 import ca.odell.glazedlists.swing.AdvancedTableModel;
-import ca.odell.glazedlists.swing.TableComparatorChooser;
 import ca.odell.glazedlists.swing.TextComponentMatcherEditor;
 import model.PickupLine;
 import service.filterator.PickupLineFilterator;
@@ -15,48 +14,87 @@ import javax.swing.*;
 import java.awt.*;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.stream.Collectors;
 
 import static ca.odell.glazedlists.swing.GlazedListsSwing.eventTableModelWithThreadProxyList;
 
 public class PickupLineListView {
 
-    private EventList<PickupLine> pickupLinesEventLis = new BasicEventList<>();
+    private final EventList<PickupLine> pickupLinesEventLis = new BasicEventList<>();
 
-    private Comparator<PickupLine> lineComparator = Comparator.comparing(PickupLine::getNumberOfWords);
+    private final Comparator<PickupLine> lineComparator = Comparator.comparing(PickupLine::getNumberOfWords);
 
-    public PickupLineListView(Collection<PickupLine> issues) {
-        pickupLinesEventLis.addAll(issues);
+    public PickupLineListView(Collection<PickupLine> pickupLines) {
+        pickupLinesEventLis.addAll(pickupLines);
+    }
+
+    private AdvancedTableModel<PickupLine> getTableModel(JTextField filterTextField, SortedList<PickupLine> sortedLines) {
+
+        PickupLineFilterator filterator = new PickupLineFilterator();
+        MatcherEditor<PickupLine> matcherEditor = new TextComponentMatcherEditor<>(filterTextField, filterator);
+        FilterList<PickupLine> textFilteredLines = new FilterList<>(sortedLines, matcherEditor);
+        return eventTableModelWithThreadProxyList(textFilteredLines, new PickupLineTableFormat());
+    }
+
+    private SortedList<PickupLine> getSortedList(boolean[] params) {
+        return new SortedList<>(new BasicEventList<>(
+                pickupLinesEventLis.stream()
+                        .filter(p -> !params[0] || !p.isBadLanguage())
+                        .filter(p -> !params[1] || !p.isQuestionType())
+                        .collect(Collectors.toList())
+        ), lineComparator);
     }
 
     public void display() {
-        SortedList<PickupLine> sortedLines = new SortedList<>(pickupLinesEventLis, lineComparator);
+        boolean[] sortListFilterParams = new boolean[]{false, false};
+        final SortedList<PickupLine>[] sortedLines = new SortedList[]{getSortedList(sortListFilterParams)};
 
-        JTextField filterEdit = new JTextField(10);
-        PickupLineFilterator filterator = new PickupLineFilterator();
-        MatcherEditor<PickupLine> matcherEditor = new TextComponentMatcherEditor<>(filterEdit, filterator);
-
-        FilterList<PickupLine> textFilteredLines = new FilterList<>(sortedLines, matcherEditor);
-
-        JPanel panel = new JPanel(new GridBagLayout());
-        AdvancedTableModel<PickupLine> tableModel = eventTableModelWithThreadProxyList(textFilteredLines, new PickupLineTableFormat());
-
-        JTable pickupLineJTable = new JTable(tableModel);
+        JTextField filterTextField = new JTextField(20);
+        JTable pickupLineJTable = new JTable(getTableModel(filterTextField, sortedLines[0]));
         JScrollPane pickupLineTableScrollPane = new JScrollPane(pickupLineJTable);
 
-        panel.add(new JLabel("Filter: "), new GridBagConstraints(0, 0, 1, 1, 0.0, 0.0,
-                GridBagConstraints.CENTER, GridBagConstraints.BOTH, new Insets(5, 5, 5, 5), 0, 0));
+        JPanel mainPanel = new JPanel(new BorderLayout());
+        //north
 
-        panel.add(filterEdit, new GridBagConstraints(1, 0, 1, 1, 1.0, 0.0,
-                GridBagConstraints.CENTER, GridBagConstraints.BOTH, new Insets(5, 5, 5, 5), 0, 0));
+        TabbedToolbar tabbedToolbar = new TabbedToolbar(filterTextField);
 
-        panel.add(pickupLineTableScrollPane, new GridBagConstraints(0, 1, 2, 1, 1.0, 1.0,
-                GridBagConstraints.CENTER, GridBagConstraints.BOTH, new Insets(5, 5, 5, 5), 0, 0));
+        tabbedToolbar.setProfanityListener(value -> {
+            sortListFilterParams[0] = value;
+            sortedLines[0] = getSortedList(sortListFilterParams);
+            pickupLineJTable.setModel(getTableModel(filterTextField, sortedLines[0]));
+        });
+
+        tabbedToolbar.setQuestionableLineListener(value -> {
+            sortListFilterParams[1] = value;
+            sortedLines[0] = getSortedList(sortListFilterParams);
+            pickupLineJTable.setModel(getTableModel(filterTextField, sortedLines[0]));
+        });
+
+        tabbedToolbar.setSortListener(sortButton -> {
+            String ascSortButtonText = "/\\";
+            String descSortButtonText = "\\/";
+            if (sortedLines[0].getComparator().equals(lineComparator)) {
+                sortedLines[0].setComparator(lineComparator.reversed());
+                sortButton.setText(descSortButtonText);
+
+            } else {
+                sortedLines[0].setComparator(lineComparator);
+                sortButton.setText(ascSortButtonText);
+            }
+        });
+
+        mainPanel.add(BorderLayout.NORTH, tabbedToolbar);
+
+
+        //display lines
+
+        mainPanel.add(BorderLayout.CENTER, pickupLineTableScrollPane);
 
         // create a frame with that panel
         JFrame frame = new JFrame("PickUp Lines");
         frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
-        frame.setSize(540, 380);
-        frame.getContentPane().add(panel);
+        frame.setSize(900, 680);
+        frame.getContentPane().add(mainPanel);
         frame.setVisible(true);
     }
 }
